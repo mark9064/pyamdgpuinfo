@@ -1,0 +1,39 @@
+language: python
+before_install:
+  - sudo apt-get install -y libdrm-dev
+addons:
+  apt:
+    update: true
+install:
+  - pip install cython twine
+matrix:
+  include:
+    - name: Python 3.4 (Linux)
+      os: linux
+      dist: xenial
+      python: '3.4'
+    - name: Python 3.5 (Linux)
+      os: linux
+      dist: xenial
+      python: '3.5'
+    - name: Python 3.6 (Linux)
+      os: linux
+      dist: xenial
+      python: '3.6'
+    - name: Python 3.7 (Linux)
+      os: linux
+      dist: xenial
+      python: '3.7'
+git:
+  depth: 1
+script:
+  - python setup.py bdist_wheel
+deploy:
+  provider: pypi
+  user: "mark9064"
+  password:
+    secure: OvN/b1oxpZf05v2pp2xQcskV5DcV9NuHILV54pGasYFmh9aFd5AeWAFAYZZe6a050GgCIWsnMcRNbODWLD/8jwdAEq6uThi7qFdPmyvZjSVXoUEW7cxxxU7Bhx+94dUsJpY6sR8pshIQDrVJA/R8xuitN6nn1pVeYc7kBscXZ0mvfdstK8P3CUVhiRJ5nZEqZ+6pTtzfai8tmlTZMLXRaFMsqdYuSLVwfNnmQhcm/oJqYan6BE6YrWggg/JnlSywYe1F3SAzG095veTWy7n7EiMx6dPykanpceB2WSIPwodtHl8CI5JiOjbWShHWJ5io76u0y0EVzBpUgPDU9Y/iGfdKZVm3dlZeNfzDJDbGCZkDcZBaDy8Y7fcDegsJm16/tX+iHYy+qsw57uABdnbSPp5v/jin7cnVGoR8L9HCDPTyfjkAIq9ARH2GSuz77v1vjc86VmkEqyEePOMfjiY8dMIzd8jbLD6//PlYTRMGOQYwwJ9g512Zjs1GaZSaXO9tgM1W2A/yoL0Fggnhzk0Y7JfMhDUuulJJBIcAY9SjFfNbFkQPwVa0pckoKXB6vyx3JxnIynMNHu7jvCQQ+/S0U1aQAI/7LLxx3Ntvz+Ykwwcu5eNnwc8+Hrv7tbQZLaFnRwwDsAaGWI0Qusc27l7A8J7NT8zwTQ1JXrvYL8ymjXI=
+  on:
+    tags: true
+  distributions: "sdist bdist_wheel"
+  skip_existing: true
