@@ -11,7 +11,7 @@ EXTENSIONS = [Extension(name="pyamdgpuinfo.pyamdgpuinfo", sources=["pyamdgpuinfo
 
 setuptools.setup(
     name="pyamdgpuinfo",
-    version="0.0.1",
+    version="1.0.0",
     author="mark9064",
     description="AMD GPU stats",
     long_description=LONG_DESCRIPTION,

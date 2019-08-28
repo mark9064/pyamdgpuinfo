@@ -13,6 +13,8 @@ from collections import OrderedDict
 
 # const for gpu register queries
 cdef int REGISTER_OFFSET = 8196
+# search path
+cdef str DEVICE_PATH = "/dev/dri/"
 
 cdef struct gpu_device:
     uint32_t* results
@@ -67,24 +69,37 @@ cdef int query_sensor(amdgpu_cy.amdgpu_device_handle amdgpu_dev, int info, unsig
     return amdgpu_cy.amdgpu_query_sensor_info(amdgpu_dev, info, sizeof(unsigned long long), out)
 
 
-cpdef object setup_devices():
-    """Sets up amdgpu devices
+cdef list find_devices():
+    """Finds devices in DEVICE_PATH"""
+    cdef:
+        list devices = os.listdir(DEVICE_PATH)
+        list detected_devices
+    # attempt to use newer (non-root) renderD api
+    detected_devices = [x for x in devices if "renderD" in x]
+    # fallback (requires root on some systems)
+    if not detected_devices:
+        detected_devices = [x for x in devices if "card" in x]
+    return sorted(detected_devices)
+
+
+cpdef object setup_gpus():
+    """Sets up amdgpu GPUs
 
     Params:
         No params.
     Raises:
-        OSError: if an amdgpu device is found but cannot be initialised.
+        OSError: if an amdgpu GPU is found but cannot be initialised.
     Returns:
-        collections.OrderedDict containing the paths of each device found as the key,
-        and what features the device supports as the value.
+        collections.OrderedDict containing each GPU found as the key,
+        and what features the GPU supports as the value, along with the VRAM and GTT size.
     Extra information:
-        A device will only be present in the return value if it was initialised successfully.
-        If there are no devices returned, attempting to use any of the other functions
+        A GPU will only be present in the return value if it was initialised successfully.
+        If there are no GPUs returned, attempting to use any of the other functions
         will result in an error (apart from cleanup() which will always succeed).
     """
     cdef:
         list devices
-        object out_devices = OrderedDict()
+        object gpus = OrderedDict()
         xf86drm_cy.drmVersionPtr ver
         uint32_t rreg
         amdgpu_cy.amdgpu_device_handle* amdgpu_devices_init
@@ -94,19 +109,19 @@ cpdef object setup_devices():
         amdgpu_cy.drm_amdgpu_info_vram_gtt vram_gtt
         uint32_t major_ver, minor_ver
         int drm_fd
-        unsigned long long out
+        unsigned long long out = 0
         int index
         int insert_index
         dict gpu_info
         str gpu_path
         str drm_name
-    devices = find_gpus()
+    devices = find_devices()
     amdgpu_devices_init = (<amdgpu_cy.amdgpu_device_handle*>
                            calloc(len(devices), sizeof(amdgpu_cy.amdgpu_device_handle)))
     for index, gpu_path in enumerate(devices):
         gpu_info = {}
         try:
-            drm_fd = os.open(gpu_path, os.O_RDWR)
+            drm_fd = os.open(os.path.join(DEVICE_PATH, gpu_path), os.O_RDWR)
         except Exception:
             continue
         ver = xf86drm_cy.drmGetVersion(drm_fd)
@@ -117,7 +132,7 @@ cpdef object setup_devices():
             continue
         if amdgpu_cy.amdgpu_device_initialize(drm_fd, &major_ver, &minor_ver, &amdgpu_dev):
             os.close(drm_fd)
-            raise OSError("Can't initialize amdgpu driver for amdgpu device"
+            raise OSError("Can't initialize amdgpu driver for amdgpu GPU"
                           " (this is usually a permission error)")
         os.close(drm_fd)
         # ioctl check
@@ -137,27 +152,27 @@ cpdef object setup_devices():
         gpu_info["load_available"] = not query_sensor(amdgpu_dev, amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_LOAD, &out)
         gpu_info["power_available"] = not query_sensor(amdgpu_dev, amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_AVG_POWER, &out)
 
-        out_devices[gpu_path] = gpu_info
+        gpus[gpu_path] = gpu_info
         amdgpu_devices_init[index] = amdgpu_dev
 
-    if out_devices:
+    if gpus:
         amdgpu_devices = (<amdgpu_cy.amdgpu_device_handle*>
-                          calloc(len(out_devices), sizeof(amdgpu_cy.amdgpu_device_handle)))
+                          calloc(len(gpus), sizeof(amdgpu_cy.amdgpu_device_handle)))
         insert_index = 0
         for index, gpu_path in enumerate(devices):
             if amdgpu_devices_init[index]:
                 amdgpu_devices[insert_index] = amdgpu_devices_init[index]
-                out_devices[gpu_path]["id"] = insert_index
+                gpus[gpu_path]["id"] = insert_index
                 insert_index += 1
-        GLOBALS["devices"] = <intptr_t>amdgpu_devices
+        GLOBALS["gpus"] = <intptr_t>amdgpu_devices
     free(amdgpu_devices_init)
-    GLOBALS["n_gpus"] = len(out_devices)
-    GLOBALS["py_devices"] = out_devices
-    return out_devices
+    GLOBALS["n_gpus"] = len(gpus)
+    GLOBALS["py_gpus"] = gpus
+    return gpus
 
 
-cpdef object start_polling(int ticks_per_second=100, int buffer_size_in_ticks=100):
-    """Starts polling device registers for utilisation statistics
+cpdef object start_utilisation_polling(int ticks_per_second=100, int buffer_size_in_ticks=100):
+    """Starts polling GPU registers for utilisation statistics
 
     Params:
         ticks_per_second (optional, default 100): int; specifies the number of device polls
@@ -165,16 +180,23 @@ cpdef object start_polling(int ticks_per_second=100, int buffer_size_in_ticks=10
         buffer_size_in_ticks (optional, default 100): int; specifies the number of ticks
         which will be stored.
     Raises:
-        RuntimeError: if no devices are available.
+        RuntimeError: if no GPUs are available.
         OSError: if the polling thread fails to start.
     Returns:
         Nothing returned.
     Extra information:
-        The polling thread does not need to be started to get device statistics.
+        The polling thread does not need to be started to get GPU statistics.
         The thread only provides stats on the utilisation of the different parts
-        of the device (e.g shader interpolator, texture addresser).
+        of the GPU (e.g shader interpolator, texture addresser).
         The time window used for these stats when calculating them is defined
         by the ticks_per_second and buffer_size_in_ticks args.
+        When the utilisation polling thread is started, it takes some time to 'warm up'.
+        While it is initialising, GPU utilisation cannot be queried and will result in
+        an error. The length of this initialisation period is roughly equal to the buffer size
+        in ticks divided by the ticks per second.
+
+        Utilisation polling may not work correctly with all devices, in testing it
+        has been unreliable with APUs.
     """
     cdef:
         pthread_cy.pthread_t tid
@@ -182,11 +204,11 @@ cpdef object start_polling(int ticks_per_second=100, int buffer_size_in_ticks=10
         int index
         poll_args_t *args
         amdgpu_cy.amdgpu_device_handle *amdgpu_devices
-    if "devices" not in GLOBALS:
-        raise RuntimeError("No devices available")
+    if "gpus" not in GLOBALS:
+        raise RuntimeError("No GPUs available")
     pthread_cy.pthread_attr_init(&attr)
     pthread_cy.pthread_attr_setdetachstate(&attr, pthread_cy.PTHREAD_CREATE_DETACHED)
-    amdgpu_devices = <amdgpu_cy.amdgpu_device_handle *><intptr_t>GLOBALS["devices"]
+    amdgpu_devices = <amdgpu_cy.amdgpu_device_handle *><intptr_t>GLOBALS["gpus"]
     args = <poll_args_t*>malloc(sizeof(poll_args_t))
     args.n_gpus = GLOBALS["n_gpus"]
     args.gpus = <gpu_device*>calloc(GLOBALS["n_gpus"], sizeof(gpu_device))
@@ -199,7 +221,7 @@ cpdef object start_polling(int ticks_per_second=100, int buffer_size_in_ticks=10
     args.buffer_size = buffer_size_in_ticks
     if pthread_cy.pthread_create(&tid, &attr, poll_registers, args) != 0:
         # cleans up
-        stop_polling()
+        stop_utilisation_polling()
         raise OSError("Poll thread failed to start")
     GLOBALS["thread_args"] = <intptr_t>args
 
@@ -240,23 +262,25 @@ cdef void* poll_registers(void *arg) nogil:
     return NULL
 
 
-cpdef stop_polling():
-    """Stops the polling thread
+cpdef object stop_utilisation_polling():
+    """Stops the utilisation polling thread
 
     Params:
         No params.
     Raises:
-        RuntimeError: if the thread was not started
+        RuntimeError: if the thread was not started.
     Returns:
         Nothing returned.
     Extra information:
-        This also frees all resources allocated for the thread."""
+        This also frees all resources allocated for the thread.
+    """
     cdef:
         poll_args_t* args
         int index
-    if "thread_args" not in GLOBALS:
+    thread_args = GLOBALS.pop("thread_args", None)
+    if thread_args is None:
         raise RuntimeError("Thread never started")
-    args = <poll_args_t*><intptr_t>GLOBALS.pop("thread_args")
+    args = <poll_args_t*><intptr_t>thread_args
     args.desired_state = 0
     # wait for it to exit
     while args.current_state != 0:
@@ -268,118 +292,8 @@ cpdef stop_polling():
     # no join required as it is detached
 
 
-cpdef object get_device_stats(ignore=None):
-    """Fetches stats for a device
-
-    Params:
-        ignore (optional, default None): list; specified devices to ignore by path.
-    Raises:
-        RuntimeError: if no devices are available.
-    Returns:
-        collections.OrderedDict containg path as key and device infomation as the value.
-    Extra information:
-        The data returned depends on what has been detected as available. This detection
-        is done in setup_devices(). If the start_polling() has been called successfully,
-        infomation on utilisation of different device parts will be available.
-        The following values can be present:
-            "vram_usage" - video memory usage (B)
-            "vram_size" - total video memory (B)
-            "gtt_usage" - graphics translation table (GTT) usage (B)
-            "gtt_size" - total GTT (B)
-            "sclk_max" - max shader (core) clock (Hz)
-            "sclk_current" - current shader clock (Hz)
-            "mclk_max" - max memory clock (Hz)
-            "mclk_current" - current memory clock (Hz)
-            "temperature" - temperature (°C)
-            "load" - overall gpu load (0 - 1)
-            "average_power" - power consumption (W)
-            --if start_polling--
-            "utilisation":
-                "event_engine" (0 - 1)
-                "texture_addresser" (0 - 1)
-                "vertex_grouper_tesselator" (0 - 1)
-                "shader_export" (0 - 1)
-                "sequencer_instruction_cache" (0 - 1)
-                "shader_interpolator" (0 - 1)
-                "scan_converter" (0 - 1)
-                "primitive_assembly" (0 - 1)
-                "depth_block" (0 - 1)
-                "colour_block" (0 - 1)
-                "graphics_pipe" (0 - 1)
-    """
-    cdef:
-        poll_args_t* thread_args
-        int gpu_id
-        int index
-        object out_results = OrderedDict()
-        unsigned long long out
-        uint32_t gbrm_value
-        amdgpu_cy.amdgpu_gpu_info gpu
-        dict utilisation
-        dict gpu_info
-        str gpu_path
-        str bit
-        amdgpu_cy.amdgpu_device_handle* gpus
-        unsigned int compare
-        bint thread_exists = "thread_args" in GLOBALS
-    if "devices" not in GLOBALS:
-        raise RuntimeError("No devices available")
-    gpus = <amdgpu_cy.amdgpu_device_handle*><intptr_t>GLOBALS["devices"]
-    if thread_exists:
-        thread_args = <poll_args_t*><intptr_t>GLOBALS["thread_args"]
-    if ignore is None:
-        ignore = []
-    for gpu_path, gpu_info in GLOBALS["py_devices"].items():
-        if gpu_path in ignore:
-            continue
-        out_results[gpu_path] = {}
-        gpu_id = gpu_info["id"]
-        if gpu_info["vram_available"]:
-            query_info(gpus[gpu_id], amdgpu_cy.AMDGPU_INFO_VRAM_USAGE, &out)
-            out_results[gpu_path]["vram_usage"] = out
-        if "vram_size" in gpu_info:
-            out_results[gpu_path]["vram_size"] = gpu_info["vram_size"]
-        if gpu_info["gtt_available"]:
-            query_info(gpus[gpu_id], amdgpu_cy.AMDGPU_INFO_GTT_USAGE, &out)
-            out_results[gpu_path]["gtt_usage"] = out
-        if "gtt_size" in gpu_info:
-            out_results[gpu_path]["gtt_size"] = gpu_info["gtt_size"]
-        if gpu_info["clocks_minmax_available"]:
-            amdgpu_cy.amdgpu_query_gpu_info(gpus[gpu_id], &gpu)
-            out_results[gpu_path]["sclk_max"] = gpu.max_engine_clk * 10 ** 3
-            out_results[gpu_path]["mclk_max"] = gpu.max_memory_clk * 10 ** 3
-        if gpu_info["sclk_available"]:
-            query_sensor(gpus[gpu_id], amdgpu_cy.AMDGPU_INFO_SENSOR_GFX_SCLK, &out)
-            out_results[gpu_path]["sclk_current"] = out * 10 ** 6
-        if gpu_info["mclk_available"]:
-            query_sensor(gpus[gpu_id], amdgpu_cy.AMDGPU_INFO_SENSOR_GFX_MCLK, &out)
-            out_results[gpu_path]["mclk_current"] = out * 10 ** 6
-        if gpu_info["temp_available"]:
-            query_sensor(gpus[gpu_id], amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_TEMP, &out)
-            out_results[gpu_path]["temperature"] = out / 1000
-        if gpu_info["load_available"]:
-            query_sensor(gpus[gpu_id], amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_LOAD, &out)
-            out_results[gpu_path]["load"] = out / 100
-        if gpu_info["power_available"]:
-            query_sensor(gpus[gpu_id], amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_AVG_POWER, &out)
-            out_results[gpu_path]["avg_power"] = out
-
-        if thread_exists:
-            if thread_args.current_state == 1:
-                utilisation = {k: 0 for k in COMPARE_BITS}
-                for index in range(thread_args.buffer_size):
-                    gbrm_value = thread_args.gpus[gpu_id].results[index]
-                    for bit, compare in COMPARE_BITS.items():
-                        if gbrm_value & compare:
-                            utilisation[bit] += 1
-                out_results[gpu_path]["utilisation"] = (
-                    {k: v / thread_args.buffer_size for k, v in utilisation.items()}
-                )
-    return out_results
-
-
-cpdef cleanup():
-    """Cleans up resources allocated for each device
+cpdef object cleanup():
+    """Cleans up resources allocated for each GPU
 
     Params:
         No params.
@@ -392,25 +306,252 @@ cpdef cleanup():
         but there's no point running it when your program finishes as the
         resources will be automatically freed when the process ends.
     """
-    devices_pointer = GLOBALS.pop("devices", None)
+    GLOBALS.pop("py_gpus", None)
+    devices_pointer = GLOBALS.pop("gpus", None)
     if devices_pointer is not None:
         gpus = <amdgpu_cy.amdgpu_device_handle*><intptr_t>devices_pointer
         free(gpus)
 
+cdef object check_query_valid(str gpu):
+    if "gpus" not in GLOBALS:
+        raise RuntimeError("GPUs not initialised, call setup_gpus() before querying a GPU")
+    if gpu not in GLOBALS["py_gpus"]:
+        raise RuntimeError("GPU requested does not exist / has not been initialised")
 
-cdef list find_gpus():
-    """Finds gpus"""
+cdef amdgpu_cy.amdgpu_device_handle get_gpu_handle(str gpu):
     cdef:
-        str gpu_path = "/dev/dri/"
-        list gpus = os.listdir(gpu_path)
-        list detected_gpus
+        dict gpu_obj
+        amdgpu_cy.amdgpu_device_handle gpu_handle
+    gpu_obj = GLOBALS["py_gpus"][gpu]
+    gpu_handle = (<amdgpu_cy.amdgpu_device_handle*><intptr_t>GLOBALS["gpus"])[gpu_obj["id"]]
+    return gpu_handle
+
+cdef object check_amdgpu_retcode(int retcode):
+    if retcode != 0:
+        raise RuntimeError("Unknown query failure (an amdgpu call failed)")
+
+cpdef object query_max_clocks(str gpu):
+    """Queries max GPU clocks
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        dict,
+            - "max_sclk": int, hertz
+            - "max_mclk": int, hertz
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        int multiplier = 10 ** 3
+        amdgpu_cy.amdgpu_gpu_info gpu_info_struct
+    check_query_valid(gpu)
+    check_amdgpu_retcode(amdgpu_cy.amdgpu_query_gpu_info(get_gpu_handle(gpu), &gpu_info_struct))
+    return {k: v * multiplier for k, v in dict(sclk_max=gpu_info_struct.max_engine_clk,
+                                               mclk_max=gpu_info_struct.max_memory_clk).items()}
+    
+cpdef object query_vram_usage(str gpu):
+    """Queries VRAM usage
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        int, usage in bytes.
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        unsigned long long out = 0
+        int multiplier = 1
+    check_query_valid(gpu)
+    check_amdgpu_retcode(query_info(get_gpu_handle(gpu), amdgpu_cy.AMDGPU_INFO_VRAM_USAGE, &out))
+    return out * multiplier
+
+cpdef object query_gtt_usage(str gpu):
+    """Queries GTT usage
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        int, usage in bytes.
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        unsigned long long out = 0
+        int multiplier = 1
+    check_query_valid(gpu)
+    check_amdgpu_retcode(query_info(get_gpu_handle(gpu), amdgpu_cy.AMDGPU_INFO_GTT_USAGE, &out))
+    return out * multiplier
+
+cpdef object query_sclk(str gpu):
+    """Queries shader (core) clock
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        int, shader clock in hertz.
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        unsigned long long out = 0
+        int multiplier = 10 ** 6
+    check_query_valid(gpu)
+    check_amdgpu_retcode(query_sensor(get_gpu_handle(gpu), amdgpu_cy.AMDGPU_INFO_SENSOR_GFX_SCLK, &out))
+    return out * multiplier
+
+cpdef object query_mclk(str gpu):
+    """Queries memory clock
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        int, memory clock in hertz.
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        unsigned long long out = 0
+        int multiplier = 10 ** 6
+    check_query_valid(gpu)
+    check_amdgpu_retcode(query_sensor(get_gpu_handle(gpu), amdgpu_cy.AMDGPU_INFO_SENSOR_GFX_MCLK, &out))
+    return out * multiplier
+
+cpdef object query_temp(str gpu):
+    """Queries temperature
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        float, temperature in °C.
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        unsigned long long out = 0
+        double multiplier = 1 / 10 ** 3
+    check_query_valid(gpu)
+    check_amdgpu_retcode(query_sensor(get_gpu_handle(gpu), amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_TEMP, &out))
+    return out * multiplier
+
+cpdef object query_load(str gpu):
+    """Queries GPU load
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        float, value between 0 and 1.
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        unsigned long long out = 0
+        double multiplier = 1 / 10 ** 2
+    check_query_valid(gpu)
+    check_amdgpu_retcode(query_sensor(get_gpu_handle(gpu), amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_LOAD, &out))
+    return out * multiplier
+
+cpdef object query_power(str gpu):
+    """Queries power consumption
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        int, consumption in watts.
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised.
+            - An error when calling amdgpu methods.
+    """
+    cdef:
+        unsigned long long out = 0
+        int multiplier = 1
+    check_query_valid(gpu)
+    check_amdgpu_retcode(query_sensor(get_gpu_handle(gpu), amdgpu_cy.AMDGPU_INFO_SENSOR_GPU_AVG_POWER, &out))
+    return out * multiplier
+
+cpdef object query_utilisation(str gpu):
+    """Queries utilisation of different GPU parts
+    
+    Params:
+        gpu: str; the name of the GPU to query as returned by setup_gpus().
+    Raises:
+        RuntimeError: details of the error will be in the error message (see extra infomation).
+    Returns:
+        dict containing utilisations from 0 - 1 (float):
+            - "event_engine"
+            - "texture_addresser"
+            - "vertex_grouper_tesselator"
+            - "shader_export"
+            - "sequencer_instruction_cache"
+            - "shader_interpolator"
+            - "scan_converter"
+            - "primitive_assembly"
+            - "depth_block"
+            - "colour_block"
+            - "graphics_pipe"
+    Extra information:
+        RuntimeError can be raised for:
+            - GPUs not being initialised
+            - Utilisation polling thread not existing/alive if utilisation requested
+            - Utilisation polling thread warming up
+    """
+    cdef:
+        dict gpu_obj
+        poll_args_t* thread_args
+        dict utilisation
         int index
-        str card
-    # attempt to use newer (non-root) renderD api
-    detected_gpus = [x for x in gpus if "renderD" in x]
-    # fallback (requires root on some systems)
-    if not detected_gpus:
-        detected_gpus = [x for x in gpus if "card" in x]
-    for index, card in enumerate(detected_gpus):
-        detected_gpus[index] = os.path.join(gpu_path, card)
-    return sorted(detected_gpus)
+        uint32_t gbrm_value
+        str bit
+        unsigned int compare
+    check_query_valid(gpu)
+    gpu_obj = GLOBALS["py_gpus"][gpu]
+    if "thread_args" not in GLOBALS:
+        raise RuntimeError("Utilisation polling thread not running, call "
+                           "start_utilisation_polling() (and wait for thread warmup) "
+                           "before querying utilisation")
+    thread_args = <poll_args_t*><intptr_t>GLOBALS["thread_args"]
+    if thread_args.current_state == 0:
+        raise RuntimeError("Utilisation polling thread is not alive")
+    if thread_args.current_state == 2:
+        raise RuntimeError("Utilisation polling thread warming up, "
+                           "warmup takes {0:.2f}s with current options"
+                           .format(thread_args.buffer_size / thread_args.ticks_per_second))
+    utilisation = {k: 0 for k in COMPARE_BITS}
+    for index in range(thread_args.buffer_size):
+        gbrm_value = thread_args.gpus[gpu_obj["id"]].results[index]
+        for bit, compare in COMPARE_BITS.items():
+            if gbrm_value & compare:
+                utilisation[bit] += 1
+    return {k: v / thread_args.buffer_size for k, v in utilisation.items()}
