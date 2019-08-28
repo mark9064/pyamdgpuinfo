@@ -11,7 +11,7 @@ EXTENSIONS = [Extension(name="pyamdgpuinfo.pyamdgpuinfo", sources=["pyamdgpuinfo
 
 setuptools.setup(
     name="pyamdgpuinfo",
-    version="1.0.0",
+    version="1.0.1",
     author="mark9064",
     description="AMD GPU stats",
     long_description=LONG_DESCRIPTION,
@@ -22,7 +22,7 @@ setuptools.setup(
     zip_safe=False,
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Programming Language :: Cython"
+        "Programming Language :: Cython",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: POSIX :: Linux",
         "Development Status :: 3 - Alpha",
