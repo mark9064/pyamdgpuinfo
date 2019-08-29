@@ -1,35 +1,51 @@
-language: python
-before_install:
-  - sudo apt-get install -y libdrm-dev
+language: generic
 addons:
   apt:
     update: true
-install:
-  - pip install cython twine
 matrix:
   include:
-    - name: Python 3.5 (Linux)
+    - name: Python 3.5 - 3.7 manylinux
       os: linux
       dist: xenial
-      python: '3.5'
-    - name: Python 3.6 (Linux)
-      os: linux
-      dist: xenial
-      python: '3.6'
+      before_install:
+        - sudo apt-get install -y python3 python3-dev python3-pip
+        - sudo python3 -m pip install twine
+      sudo: required
+      services:
+        - docker
+      env: DOCKER_IMAGE=quay.io/pypa/manylinux2010_x86_64 PLAT=manylinux2010_x86_64
+      install:
+        - docker pull $DOCKER_IMAGE
+      script:
+        - docker run --rm -e PLAT=$PLAT -v `pwd`:/io $DOCKER_IMAGE $PRE_CMD /io/ci/travis_build_wheels.sh
+        - ls dist/
+      deploy:
+        provider: script
+        script: python3 -m twine upload -u mark9064 dist/*
+        on:
+          tags: true
     - name: Python 3.7 (Linux)
       os: linux
+      language: python
       dist: xenial
       python: '3.7'
+      before_install:
+        - sudo apt-get install -y libdrm-dev
+      install:
+        - pip install cython twine 
+      script:
+        - python setup.py bdist_wheel
+      deploy:
+        provider: pypi
+        user: mark9064
+        password:
+          secure: eSZ6VL2uJy8fxenIEbE+pX+YOgkrRgKFP8pNhJlxQUb/YgRqq9gL1JevgoxCX9xs1dAgdznl7gsDMlrRZGazVB6gN1lwXzFli6eKMKUf6rDpTefg2z5eGdkrl+Ds0gna5Rie60bNQTqaA2ob+JcL/afxjLKzlwmPUjDdYOIh0wZ9gAvwRKkTFioX78O/kqS6VEA23gHitCuE0YAruG7UzO7nzVsWpluhRqEhtrUawcx8XHbnnPe+baYe2p93sYZON8hqp5/pC+vZUMlfNZ4f6V+EJjyeSW8Cf5BIw/5zdzucEzRs59+P+F4+GAlJusA4qSCC13B4PrP+8apRKzdYg+XOSb0XeKAnfqGcaq8QulUCXaaWpqO559mEkIwg+bisL8N2waWdX2LX3R7yMNBgwsamyaVbhcLfBdlqZ4vQ1gIfoqwQlVTCCaH7f3jvT6xejLKppHvFhfUfS/4AJzQLwfBQRU3YqRGPu0/HjnmgMnQJimUCvrhMeBPp/LZ9IN3Hudwq+VJZ6R6jOwymBp1DEesttjaOMXvp/VEqKRHBl8mZrELKR0bpxezY/2P/fOoNrJDwvGbpi4qsJM3mG1uSRlHgw2rInQvPx7ale8yW339kc/w8AWXug7dfyFv36jRxua1ySDecfz/d+3S6eBPHbiVagRgP9qEMQHOUC4nqMMk=
+        on:
+          tags: true
+        distributions: sdist
+        skip_existing: true
 git:
   depth: 1
-script:
-  - python setup.py bdist_wheel
-deploy:
-  provider: pypi
-  user: "mark9064"
-  password:
-    secure: OvN/b1oxpZf05v2pp2xQcskV5DcV9NuHILV54pGasYFmh9aFd5AeWAFAYZZe6a050GgCIWsnMcRNbODWLD/8jwdAEq6uThi7qFdPmyvZjSVXoUEW7cxxxU7Bhx+94dUsJpY6sR8pshIQDrVJA/R8xuitN6nn1pVeYc7kBscXZ0mvfdstK8P3CUVhiRJ5nZEqZ+6pTtzfai8tmlTZMLXRaFMsqdYuSLVwfNnmQhcm/oJqYan6BE6YrWggg/JnlSywYe1F3SAzG095veTWy7n7EiMx6dPykanpceB2WSIPwodtHl8CI5JiOjbWShHWJ5io76u0y0EVzBpUgPDU9Y/iGfdKZVm3dlZeNfzDJDbGCZkDcZBaDy8Y7fcDegsJm16/tX+iHYy+qsw57uABdnbSPp5v/jin7cnVGoR8L9HCDPTyfjkAIq9ARH2GSuz77v1vjc86VmkEqyEePOMfjiY8dMIzd8jbLD6//PlYTRMGOQYwwJ9g512Zjs1GaZSaXO9tgM1W2A/yoL0Fggnhzk0Y7JfMhDUuulJJBIcAY9SjFfNbFkQPwVa0pckoKXB6vyx3JxnIynMNHu7jvCQQ+/S0U1aQAI/7LLxx3Ntvz+Ykwwcu5eNnwc8+Hrv7tbQZLaFnRwwDsAaGWI0Qusc27l7A8J7NT8zwTQ1JXrvYL8ymjXI=
-  on:
-    tags: true
-  distributions: "sdist bdist_wheel"
-  skip_existing: true
+env:
+  global:
+    secure: eAVSGA7HEUERICd9sKi+g8AtVk1cCK0ovcR6QFGhoK15R67sgdrExODrRpvHQ5+63pOTW/wkoADUUIQjA/n+skmUyxHD9voggzPy746ynGOTnh1aWZ8vlpnpqdbtyRiI1jjwJh8qPSZkLsAnPo2i0oC3p0VD8hMt6g/X2RFza7WPA31/W3qPevz22jPlj5ikoL5E3sk4rHKYjzr8UPXxNUpkqxO0+E2G7Km6h3UuvFBl9NGeOXFRbUvfLmsPWv2poTpTHcQlvvSCRyLw6XJPneYjm6v7jtK7AVnyE9mjteeD+SxUxIMKypXZ49Enx6uGoh1Oej5QrhPh4YSf+NMoT/ZcAUvOThB1/WlT5Sxk9prWNRTBOKkmOD4ARXA/4UbUPJJN0h+3iWTPjuzZqXpspVQDeQ0crE73t85CtDVnjzXK09B1S+eSkXoyKGtQl03589i44zpUvjFBIbZsf1Cr6G23zPkZel82uJSiaNhGHaZmglIWv0P7MTaDa9y2Q+ONDdB9S9nDw24/OaaD2zlaM7fdimSBkCAVhjxYJ7S4+s7xO+2xPhWbTbBh20d/TNavRxPClbQXZErbDZ0wjJwkXY/SStA9mUWF8ED5B71ClZofA4mUH9z66FDdSs46Vn/sKv8Nan46cCf+cD4vVGe/jgqZ9rJKtFtGLj+/q3ErnT4=

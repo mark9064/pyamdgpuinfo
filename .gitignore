@@ -5,5 +5,4 @@ dist/
 *.c
 test*
 archive/
-*.sh
 __pycache__/
