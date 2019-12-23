@@ -1,3 +1,3 @@
-global-include *.pyx
-global-include *.pxd
-global-exclude *.c
+recursive-include pyamdgpuinfo *.pyx
+recursive-include pyamdgpuinfo *.pxd
+recursive-exclude pyamdgpuinfo *.c

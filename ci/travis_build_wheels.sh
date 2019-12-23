@@ -6,7 +6,7 @@ yum install -y libdrm-devel
 
 # Setup python versions to be built
 declare -a python_versions
-python_versions=(cp35-cp35m cp36-cp36m cp37-cp37m)
+python_versions=(cp35-cp35m cp36-cp36m cp37-cp37m cp38-cp38)
 
 # Install dependencies and compile wheels
 for version in "${python_versions[@]}"; do
