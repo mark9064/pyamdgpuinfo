@@ -306,6 +306,8 @@ cpdef object cleanup():
         but there's no point running it when your program finishes as the
         resources will be automatically freed when the process ends.
     """
+    if "thread_args" in GLOBALS:
+        stop_utilisation_polling()
     GLOBALS.pop("py_gpus", None)
     devices_pointer = GLOBALS.pop("gpus", None)
     if devices_pointer is not None:
