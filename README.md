@@ -8,9 +8,7 @@ AMD GPU stats
 
 Only linux is supported, using the amdgpu driver.
 
-~~Precompiled wheels for python 3.5, 3.6 and 3.7 are the default method of install. This means that you don't need cython or any other dependencies to install it normally.~~ 
-
-Currently, prebuilt wheels are unavailable due to Centos 6 shipping a libdrm version which is too old. However, the manylinux2014 PEP (599) allows Centos 7, which ships a new enough version. This means that prebuilt wheels should be available soon.
+Precompiled wheels for python 3.5, 3.6, 3.7 and 3.8 are the default method of install. This means that you don't need cython or any other dependencies to install it normally.
 
 The library is written using cython, meaning that cython and and a C compiler are needed to build and install from source. Additionally, libdrm-dev is needed. 
 
