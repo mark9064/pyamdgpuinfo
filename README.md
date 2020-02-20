@@ -18,17 +18,18 @@ Example:
 ```python
 import pyamdgpuinfo
 
-gpus = pyamdgpuinfo.setup_devices()
+gpus = pyamdgpuinfo.setup_gpus()
+
 # query first device
 first_gpu = list(gpus.keys())[0]
-vram_usage = pyamdpuinfo.query_vram_usage(first_gpu)
+vram_usage = pyamdgpuinfo.query_vram_usage(first_gpu)
 print(vram_usage)
 ```
 
 All documentation is in the docstrings of each function/class.
 
 Available functions are (see docstrings for more info):
-* setup_devices - Sets up devices so they can be used.
+* setup_gpus - Sets up devices so they can be used.
 * start_utilisation_polling - Starts polling GPU registers for utilisation statistics.
 * stop_utilisation_polling - Stops the utilisation polling thread.
 * cleanup - Cleans up allocated memory (only recommended if de-initialising the module before the main program is ended).
