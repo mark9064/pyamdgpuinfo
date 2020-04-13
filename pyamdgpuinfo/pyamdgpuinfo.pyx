@@ -3,9 +3,8 @@ cimport pyamdgpuinfo.xf86drm_cy as xf86drm_cy
 cimport pyamdgpuinfo.amdgpu_cy as amdgpu_cy
 cimport pyamdgpuinfo.pthread_cy as pthread_cy
 
-from libc.stdint cimport uint32_t, intptr_t
+from libc.stdint cimport uint32_t
 from libc.stdlib cimport malloc, calloc, free
-from libc.stdio cimport printf, fflush, stdout
 from posix.time cimport CLOCK_MONOTONIC, timespec, clock_gettime, nanosleep
 
 import os
