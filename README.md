@@ -1,6 +1,6 @@
 # pyamdgpuinfo
 
-AMD GPU stats
+AMD GPU information
 
 ## Install
 
@@ -16,36 +16,39 @@ The library is written using cython, meaning that cython and and a C compiler ar
 
 Example:
 ```python
-import pyamdgpuinfo
-
-gpus = pyamdgpuinfo.setup_gpus()
-
-# query first device
-first_gpu = list(gpus.keys())[0]
-vram_usage = pyamdgpuinfo.query_vram_usage(first_gpu)
-print(vram_usage)
+>>> import pyamdgpuinfo
+>>> n_devices = pyamdgpuinfo.detect_gpus()
+1 # we have 1 device present, so it'll be at index 0
+>>> first_gpu = pyamdgpuinfo.get_gpu(0) # returns a GPUInfo object
+>>> vram_usage = first_gpu.query_vram_usage()
+>>> print(vram_usage)
+3954978816 # number of bytes in use
 ```
 
 All documentation is in the docstrings of each function/class.
 
 Available functions are (see docstrings for more info):
-* setup_gpus - Sets up devices so they can be used.
-* start_utilisation_polling - Starts polling GPU registers for utilisation statistics.
-* stop_utilisation_polling - Stops the utilisation polling thread.
-* cleanup - Cleans up allocated memory (only recommended if de-initialising the module before the main program is ended).
+* detect_gpus - Returns the number of GPUs available
+* get_gpu - Returns a GPUInfo object for the device index specified
 
-Query functions (again see docstrings):
+
+GPUInfo methods (see docstring for class overview)
+* start_utilisation_polling - Starts polling GPU registers for utilisation statistics
+* stop_utilisation_polling - Stops the utilisation polling thread
+* query_utilisation - Queries utilisation of different GPU parts
 * query_max_clocks - Queries max GPU clocks
 * query_sclk - Queries shader (core) clock
 * query_mclk - Queries memory clock
 * query_vram_usage - Queries VRAM usage
 * query_gtt_usage - Queries GTT usage
-* query_temp - Queries temperature
+* query_temperature - Queries temperature
 * query_load - Queries GPU load
 * query_power - Queries power consumption
-* query_utilisation - Queries utilisation of different GPU parts (requires utilisation polling to be running)
+* query_northbridge_voltage - Queries northbrige voltage
+* query_graphics_voltage - Queries graphics voltage
 
-VRAM and GTT sizes are returned by setup_devices (if they are available).
+
+VRAM and GTT sizes are available as an attribute of GPUInfo.
 
 ## Mentions
 
