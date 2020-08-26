@@ -14,7 +14,8 @@ import time
 # gpu registers location
 cdef int GRBM_OFFSET = 8196
 # search path
-cdef str DEVICE_PATH = "/dev/dri/"
+cdef str DEVICE_PATH = "/dev/dri/by-path/"
+cdef str DEVICE_FALLBACK_PATH = "/dev/dri/"
 
 COMPARE_BITS = {
     "texture_addresser": 2 ** 14,
@@ -142,13 +143,18 @@ cdef void* poll_registers(void *arg) nogil:
 cdef list find_devices():
     """Finds devices in DEVICE_PATH"""
     cdef:
-        list devices = os.listdir(DEVICE_PATH)
+        list devices
         list detected_devices
+        str path = DEVICE_PATH
+    if not os.path.exists(path):
+        path = DEVICE_FALLBACK_PATH
+    devices = os.listdir(path)
     # attempt to use newer (non-root) renderD api
-    detected_devices = [x for x in devices if "renderD" in x]
+    detected_devices = [x for x in devices if "render" in x]
     # fallback (requires root on some systems)
     if not detected_devices:
         detected_devices = [x for x in devices if "card" in x]
+    detected_devices = [os.path.join(path, x) for x in detected_devices]
     return sorted(detected_devices)
 
 
@@ -196,7 +202,7 @@ cpdef object get_gpu(int gpu_id):
     for index, gpu_path in enumerate(devices):
         gpu_info = {}
         try:
-            drm_fd = os.open(os.path.join(DEVICE_PATH, gpu_path), os.O_RDWR)
+            drm_fd = os.open(gpu_path, os.O_RDWR)
         except Exception:
             continue
         ver = xf86drm_cy.drmGetVersion(drm_fd)
@@ -226,13 +232,14 @@ cdef class GPUInfo:
     """Interface for amdgpu device info queries
 
     Params:
-        device: str; device in /dev/dri/
-        gpu_id: int; sequential GPU id (from get_gpu)
+        device_path: str; full path to device in /dev/dri/ or /dev/dri/by-path/.
+        gpu_id: int; sequential GPU id (from get_gpu).
     Raises:
         No specific exceptions.
     Attrs:
         gpu_id: int; sequential GPU id.
         path: str; full path to GPU node.
+        pci_slot: str, None; PCI slot of GPU (None if unavailable).
         name: str, None; marketing name of GPU (None if unavailable).
         memory_info: dict (either all values will be present or all will be None)
             - "vram_size": int, None; GPU VRAM size.
@@ -253,6 +260,10 @@ cdef class GPUInfo:
         query_northbridge_voltage: queries northbrige voltage.
         query_graphics_voltage: queries graphics voltage.
     Extra information:
+        The pci_slot attr can be used to identify cards:
+            - This is tied to a physical PCI slot 
+            - It will only change if the card is moved to a different slot
+              or if the motherboard is changed
         This class can be instantiated directly, but a typical application would be:
             - Find number of GPUs with detect_gpus()
             - Use get_gpu(index) which returns a GPUInfo object
@@ -260,6 +271,7 @@ cdef class GPUInfo:
     cdef:
         readonly int gpu_id
         readonly str path
+        readonly str pci_slot
         readonly str name
         readonly dict memory_info
         # private
@@ -281,13 +293,17 @@ cdef class GPUInfo:
             self.utilisation_polling = False
         amdgpu_cy.amdgpu_device_deinitialize(self.device_handle)
 
-    def __init__(self, device, gpu_id):
+    def __init__(self, device_path, gpu_id):
         cdef:
             amdgpu_cy.drm_amdgpu_info_vram_gtt vram_gtt
             char* device_name
             uint32_t major_ver, minor_ver
         self.gpu_id = gpu_id
-        self.path = os.path.join(DEVICE_PATH, device)
+        self.path = device_path
+        if "by-path" in device_path:
+            self.pci_slot = device_path.split("/")[-1].split("-")[1]
+        else:
+            self.pci_slot = None
         drm_fd = os.open(self.path, os.O_RDWR)
         amdgpu_cy.amdgpu_device_initialize(drm_fd, &major_ver, &minor_ver, &self.device_handle)
         os.close(drm_fd)
