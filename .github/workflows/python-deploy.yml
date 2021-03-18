@@ -1,13 +1,13 @@
-name: Build
+name: PyPi Upload
 
 on:
-  push:
-    branches: [ master, gh-actions ]
-  pull_request:
-    branches: [ master ]
+  release:
+    types: [created]
+
+
 
 jobs:
-  build:
+  deploy:
 
     runs-on: ubuntu-latest
 
@@ -20,7 +20,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install setuptools wheel
+        pip install setuptools wheel twine
         pip install -r dev-requirements.txt
     - name: Create sdist
       run: |
@@ -31,3 +31,8 @@ jobs:
         python-versions: 'cp36-cp36m cp37-cp37m cp38-cp38 cp39-cp39'
         system-packages: 'libdrm-devel'
         build-requirements: 'cython'
+    - name: Publish
+      uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
