@@ -8,7 +8,7 @@ AMD GPU information
 
 Only linux is supported, using the amdgpu driver.
 
-Precompiled wheels for python 3.5, 3.6, 3.7 and 3.8 are the default method of install. This means that you don't need cython or any other dependencies to install it normally.
+Precompiled wheels for python 3.6, 3.7, 3.8 and 3.9 are the default method of install. This means that you don't need cython or any other dependencies to install it normally.
 
 The library is written using cython, meaning that cython and and a C compiler are needed to build and install from source. Additionally, libdrm-dev is needed. 
 
