@@ -31,8 +31,14 @@ jobs:
         python-versions: 'cp36-cp36m cp37-cp37m cp38-cp38 cp39-cp39'
         system-packages: 'libdrm-devel'
         build-requirements: 'cython'
+    - name: Copy wheels
+      run: |
+        mkdir output-wheels
+        cp dist/*-manylinux*.whl output-wheels
+        cp dist/*.tar.gz output-wheels
     - name: Publish
       uses: pypa/gh-action-pypi-publish@master
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
+        packages_dir: output-wheels/
