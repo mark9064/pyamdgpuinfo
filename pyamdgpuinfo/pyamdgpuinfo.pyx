@@ -366,12 +366,16 @@ cdef class GPUInfo:
         pthread_cy.pthread_attr_init(&attr)
         pthread_cy.pthread_attr_setdetachstate(&attr, pthread_cy.PTHREAD_CREATE_DETACHED)
         self.thread_args = <poll_args_t*>malloc(sizeof(poll_args_t))
+        if not self.thread_args:
+            raise MemoryError()
         self.thread_args.desired_state = 1
         self.thread_args.current_state = 0
         self.thread_args.measurement_interval.tv_nsec = int((1 / ticks_per_second * 1e9) % 1e9)
         self.thread_args.measurement_interval.tv_sec = 1 // ticks_per_second
         self.thread_args.buffer_size = buffer_size_in_ticks
         self.thread_args.results = <uint32_t*>calloc(buffer_size_in_ticks, sizeof(uint32_t))
+        if not self.thread_args.results:
+            raise MemoryError()
         self.thread_args.device_handle = &self.device_handle
         self.utilisation_polling = True
         if pthread_cy.pthread_create(&tid, &attr, poll_registers, self.thread_args) != 0:
