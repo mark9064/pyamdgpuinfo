@@ -163,7 +163,7 @@ cpdef int detect_gpus():
     Params:
         No params.
     Raises:
-        RuntimeError: if an error occurs when calling amdgpu methods.
+        OSError: if an AMDGPU device couldn't be initialised.
     Returns:
         int; number of GPUs available.
     """
@@ -176,7 +176,8 @@ cpdef object get_gpu(int gpu_id):
     Params:
         gpu_id: int; the sequential id of the GPU to get
     Raises:
-        RuntimeError: if an error occurs when calling amdgpu methods.
+        OSError: if an AMDGPU device couldn't be initialised.
+        RuntimeError: if the GPU requested could not be found.
     Returns:
         GPUInfo; object providing interface to GPU info calls
     Extra information:
