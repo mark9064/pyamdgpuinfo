@@ -1,4 +1,4 @@
-"""GPU information using amdgpu"""
+"""GPU information using AMDGPU"""
 cimport pyamdgpuinfo.xf86drm_cy as xf86drm_cy
 cimport pyamdgpuinfo.amdgpu_cy as amdgpu_cy
 cimport pyamdgpuinfo.pthread_cy as pthread_cy
@@ -29,15 +29,15 @@ cdef dict COMPARE_BITS = {
 
 
 cdef int get_registers(amdgpu_cy.amdgpu_device_handle amdgpu_dev, uint32_t *out) nogil:
-    """Returns whether amdgpu query succeeds, returns query result through out"""
+    """Returns whether AMDGPU query succeeds, returns query result through out"""
     return amdgpu_cy.amdgpu_read_mm_registers(amdgpu_dev, GRBM_OFFSET, 1, 0xffffffff, 0, out)
 
 cdef int query_info(amdgpu_cy.amdgpu_device_handle amdgpu_dev, int info, unsigned long long *out):
-    """Returns whether amdgpu query succeeds, returns query result through out"""
+    """Returns whether AMDGPU query succeeds, returns query result through out"""
     return amdgpu_cy.amdgpu_query_info(amdgpu_dev, info, sizeof(unsigned long long), out)
 
 cdef int query_sensor(amdgpu_cy.amdgpu_device_handle amdgpu_dev, int info, unsigned long long *out):
-    """Returns whether amdgpu query succeeds, returns query result through out"""
+    """Returns whether AMDGPU query succeeds, returns query result through out"""
     return amdgpu_cy.amdgpu_query_sensor_info(amdgpu_dev, info, sizeof(unsigned long long), out)
 
 
@@ -59,7 +59,7 @@ cdef timespec timespec_clamp(timespec time_to_clamp) nogil:
         time_to_clamp.tv_sec = 0
         time_to_clamp.tv_nsec = 0
     return time_to_clamp
-    
+
 cdef timespec timespec_sum(timespec left, timespec right) nogil:
     """Performs left + right"""
     cdef:
@@ -159,7 +159,7 @@ cdef list find_devices():
 
 cpdef int detect_gpus():
     """Returns the number of GPUs available
-    
+
     Params:
         No params.
     Raises:
@@ -213,7 +213,7 @@ cpdef object get_gpu(int gpu_id):
             continue
         if amdgpu_cy.amdgpu_device_initialize(drm_fd, &major_ver, &minor_ver, &device_handle):
             os.close(drm_fd)
-            raise OSError("Can't initialize amdgpu driver for amdgpu GPU"
+            raise OSError("Can't initialize AMDGPU driver for AMDGPU GPU"
                           " (this is usually a permission error)")
         os.close(drm_fd)
         # ioctl check
@@ -229,7 +229,7 @@ cpdef object get_gpu(int gpu_id):
 
 
 cdef class GPUInfo:
-    """Interface for amdgpu device info queries
+    """Interface for AMDGPU device info queries
 
     Params:
         device_path: str; full path to device in /dev/dri/ or /dev/dri/by-path/.
@@ -257,11 +257,11 @@ cdef class GPUInfo:
         query_temperature: queries temperature.
         query_load: queries overall GPU load.
         query_power: queries power consumption.
-        query_northbridge_voltage: queries northbrige voltage.
+        query_northbridge_voltage: queries northbridge voltage.
         query_graphics_voltage: queries graphics voltage.
     Extra information:
         The pci_slot attr can be used to identify cards:
-            - This is tied to a physical PCI slot 
+            - This is tied to a physical PCI slot
             - It will only change if the card is moved to a different slot
               or if the motherboard is changed
         This class can be instantiated directly, but a typical application would be:
@@ -314,7 +314,7 @@ cdef class GPUInfo:
         os.close(drm_fd)
         self.memory_info = {}
         if not amdgpu_cy.amdgpu_query_info(self.device_handle, amdgpu_cy.AMDGPU_INFO_VRAM_GTT,
-                                           sizeof(vram_gtt), &vram_gtt): # amdgpu vram gtt query succeeded
+                                           sizeof(vram_gtt), &vram_gtt): # AMDGPU vram gtt query succeeded
             self.memory_info["vram_size"] = vram_gtt.vram_size
             self.memory_info["gtt_size"] = vram_gtt.gtt_size
             self.memory_info["vram_cpu_accessible_size"] = vram_gtt.vram_cpu_accessible_size
@@ -348,7 +348,7 @@ cdef class GPUInfo:
                 - These registers store the status of GPU components, simply as 1 (in use) or 0 (not in use) for each component
             - The results of these reads is saved to a buffer of {buffer_size_in_ticks}
             - When utilisation is queried, a mean is taken of all the values in the buffer
-                - e.g texture addresser data may be 0000100100, 10 samples with 2 ones, so utilisation is 0.2 
+                - e.g texture addresser data may be 0000100100, 10 samples with 2 ones, so utilisation is 0.2
             - This means that the time period of the mean is buffer_size_in_ticks / ticks_per_second
                 - So at default it is a mean of the past second (100/100 = 1)
             - When the thread has just started, querying utilisation before one time period has elasped will error
@@ -413,11 +413,11 @@ cdef class GPUInfo:
 
     cpdef object query_utilisation(self):
         """Queries utilisation of different GPU units
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: details of the error will be in the error message (see extra infomation).
+            RuntimeError: details of the error will be in the error message (see extra information).
         Returns:
             dict containing utilisations from 0 - 1 (float):
                 - "texture_addresser"
@@ -461,15 +461,15 @@ cdef class GPUInfo:
 
     cdef object check_amdgpu_retcode(self, int retcode):
         if retcode != 0:
-            raise RuntimeError("Unknown query failure (an amdgpu call failed). This query may not be supported for this GPU.")
+            raise RuntimeError("Unknown query failure (an AMDGPU call failed). This query may not be supported for this GPU.")
 
     cpdef object query_max_clocks(self):
         """Queries max GPU clocks
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             dict,
                 - "max_sclk": int, hertz
@@ -484,11 +484,11 @@ cdef class GPUInfo:
 
     cpdef object query_vram_usage(self):
         """Queries VRAM usage
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             int, usage in bytes.
         """
@@ -500,11 +500,11 @@ cdef class GPUInfo:
 
     cpdef object query_gtt_usage(self):
         """Queries GTT usage
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             int, usage in bytes.
         """
@@ -513,14 +513,14 @@ cdef class GPUInfo:
             int multiplier = 1
         self.check_amdgpu_retcode(query_info(self.device_handle, amdgpu_cy.AMDGPU_INFO_GTT_USAGE, &out))
         return out * multiplier
-    
+
     cpdef object query_sclk(self):
         """Queries shader (core) clock
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             int, shader clock in hertz.
         """
@@ -529,14 +529,14 @@ cdef class GPUInfo:
             int multiplier = 1000000
         self.check_amdgpu_retcode(query_sensor(self.device_handle, amdgpu_cy.AMDGPU_INFO_SENSOR_GFX_SCLK, &out))
         return out * multiplier
-    
+
     cpdef object query_mclk(self):
         """Queries memory clock
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             int, memory clock in hertz.
         """
@@ -548,11 +548,11 @@ cdef class GPUInfo:
 
     cpdef object query_temperature(self):
         """Queries temperature
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             float, temperature in °C.
         """
@@ -564,11 +564,11 @@ cdef class GPUInfo:
 
     cpdef object query_load(self):
         """Queries overall GPU load
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             float, value between 0 and 1.
         """
@@ -580,11 +580,11 @@ cdef class GPUInfo:
 
     cpdef object query_power(self):
         """Queries power consumption
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             int, consumption in W.
         """
@@ -596,11 +596,11 @@ cdef class GPUInfo:
 
     cpdef object query_northbridge_voltage(self):
         """Queries northbridge voltage
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             float, voltage in V.
         """
@@ -609,14 +609,14 @@ cdef class GPUInfo:
             double multiplier = 0.001
         self.check_amdgpu_retcode(query_sensor(self.device_handle, amdgpu_cy.AMDGPU_INFO_SENSOR_VDDNB, &out))
         return out * multiplier
-    
+
     cpdef object query_graphics_voltage(self):
         """Queries graphics voltage
-        
+
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling amdgpu methods.
+            RuntimeError: if an error occurs when calling AMDGPU methods.
         Returns:
             float, voltage in V.
         """
