@@ -8,7 +8,6 @@ from libc.stdlib cimport malloc, calloc, free
 from posix.time cimport CLOCK_MONOTONIC, timespec, clock_gettime, nanosleep
 
 import os
-import time
 
 
 # gpu registers location
@@ -283,11 +282,16 @@ cdef class GPUInfo:
         self.utilisation_polling = False
 
     def __dealloc__(self):
+        # __del__ not available for extension types until Cython 3.0
+        cdef:
+            timespec sleep_time
+        sleep_time.tv_nsec = 1_000_000
+        sleep_time.tv_sec = 0
         if self.utilisation_polling:
             self.thread_args.desired_state = 0
             # wait for it to exit
             while self.thread_args.current_state != 0:
-                time.sleep(0.001)
+                nanosleep(&sleep_time, NULL)
             free(self.thread_args.results)
             free(self.thread_args)
             self.utilisation_polling = False
@@ -387,12 +391,17 @@ cdef class GPUInfo:
         Extra information:
             This also frees all resources allocated for the thread.
         """
+        cdef:
+            timespec sleep_time
+        sleep_time.tv_nsec = 1_000_000
+        sleep_time.tv_sec = 0
+
         if not self.utilisation_polling:
             raise RuntimeError("Thread non-existent (never started or already stopped)")
         self.thread_args.desired_state = 0
         # wait for it to exit
         while self.thread_args.current_state != 0:
-            time.sleep(0.001)
+            nanosleep(&sleep_time, NULL)
         free(self.thread_args.results)
         free(self.thread_args)
         self.utilisation_polling = False
