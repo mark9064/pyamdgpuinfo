@@ -16,7 +16,7 @@ cdef int GRBM_OFFSET = 8196
 cdef str DEVICE_PATH = "/dev/dri/by-path/"
 cdef str DEVICE_FALLBACK_PATH = "/dev/dri/"
 
-COMPARE_BITS = {
+cdef dict COMPARE_BITS = {
     "texture_addresser": 2 ** 14,
     "shader_export": 2 ** 20,
     "shader_interpolator": 2 ** 22,
