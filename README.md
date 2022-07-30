@@ -4,13 +4,13 @@ AMD GPU information
 
 ## Install
 
-`pip3 install pyamdgpuinfo`
+`pip install pyamdgpuinfo`
 
-Only linux is supported, using the amdgpu driver.
+Only Linux is supported, using the AMDGPU driver.
 
-Precompiled wheels for python 3.6, 3.7, 3.8, 3.9 and 3.10 are the default method of install. This means that you don't need cython or any other dependencies to install it normally.
+The library is written using Cython, meaning that Cython and and a C compiler are needed to build and install from source. Additionally, libdrm development headers are required. 
 
-The library is written using cython, meaning that cython and and a C compiler are needed to build and install from source. Additionally, libdrm development headers are needed. 
+Precompiled wheels for Python 3.7-3.10 are the default method of install. This means that you don't need Cython or any other dependencies to install it normally.
 
 ## Usage
 
@@ -44,7 +44,7 @@ GPUInfo methods (see docstring for class overview)
 * query_temperature - Queries temperature
 * query_load - Queries GPU load
 * query_power - Queries power consumption
-* query_northbridge_voltage - Queries northbrige voltage
+* query_northbridge_voltage - Queries northbridge voltage
 * query_graphics_voltage - Queries graphics voltage
 
 
