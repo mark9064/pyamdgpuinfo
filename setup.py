@@ -6,7 +6,7 @@ from Cython.Build import cythonize
 with open("README.md", "r") as fh:
     LONG_DESCRIPTION = fh.read()
 
-EXTENSIONS = [Extension(name="pyamdgpuinfo.pyamdgpuinfo", sources=["pyamdgpuinfo/pyamdgpuinfo.pyx"],
+EXTENSIONS = [Extension(name="pyamdgpuinfo._pyamdgpuinfo", sources=["pyamdgpuinfo/_pyamdgpuinfo.pyx"],
                         include_dirs=["/usr/include/libdrm"], libraries=["drm_amdgpu"])]
 
 setuptools.setup(
