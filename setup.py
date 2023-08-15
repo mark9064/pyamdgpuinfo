@@ -1,13 +1,18 @@
 """Setup information"""
 import setuptools
-from distutils.extension import Extension
 from Cython.Build import cythonize
 
-with open("README.md", "r") as fh:
+with open("README.md", "r", encoding="utf-8") as fh:
     LONG_DESCRIPTION = fh.read()
 
-EXTENSIONS = [Extension(name="pyamdgpuinfo._pyamdgpuinfo", sources=["pyamdgpuinfo/_pyamdgpuinfo.pyx"],
-                        include_dirs=["/usr/include/libdrm"], libraries=["drm_amdgpu"])]
+EXTENSIONS = [
+    setuptools.Extension(
+        name="pyamdgpuinfo._pyamdgpuinfo",
+        sources=["pyamdgpuinfo/_pyamdgpuinfo.pyx"],
+        include_dirs=["/usr/include/libdrm"],
+        libraries=["drm_amdgpu"],
+    )
+]
 
 setuptools.setup(
     name="pyamdgpuinfo",
@@ -18,15 +23,15 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/mark9064/pyamdgpuinfo",
     packages=setuptools.find_packages(),
-    python_requires='>=3.7',
-    ext_modules=cythonize(EXTENSIONS, language_level=3),
+    python_requires=">=3.7",
+    ext_modules=cythonize(EXTENSIONS, language_level="3str"),
     zip_safe=False,
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Cython",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: POSIX :: Linux",
-        "Development Status :: 4 - Beta",
-        "Natural Language :: English"
+        "Development Status :: 5 - Production/Stable",
+        "Natural Language :: English",
     ],
 )

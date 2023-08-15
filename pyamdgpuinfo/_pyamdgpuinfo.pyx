@@ -83,7 +83,7 @@ cdef struct poll_args_t:
     amdgpu_cy.amdgpu_device_handle* device_handle
 
 
-cdef void* poll_registers(void *arg) nogil:
+cdef void* poll_registers(void *arg) noexcept nogil:
     cdef:
         int index = 0
         poll_args_t *args
@@ -193,14 +193,11 @@ cpdef object get_gpu(int gpu_id):
         amdgpu_cy.amdgpu_device_handle device_handle
         uint32_t major_ver, minor_ver
         int drm_fd
-        int index
         int amdgpu_index = 0
-        dict gpu_info
         str gpu_path
         str drm_name
     devices = find_devices()
-    for index, gpu_path in enumerate(devices):
-        gpu_info = {}
+    for gpu_path in devices:
         try:
             drm_fd = os.open(gpu_path, os.O_RDWR)
         except Exception:
@@ -301,7 +298,7 @@ cdef class GPUInfo:
     def __init__(self, device_path, gpu_id):
         cdef:
             amdgpu_cy.drm_amdgpu_info_vram_gtt vram_gtt
-            char* device_name
+            const char* device_name
             uint32_t major_ver, minor_ver
         self.gpu_id = gpu_id
         self.path = device_path
