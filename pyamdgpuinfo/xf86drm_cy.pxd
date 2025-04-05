@@ -1,14 +1,7 @@
 cdef extern from "xf86drm.h" nogil:
+    # note: _drmVersion defines more fields but we only need name
     struct _drmVersion:
-        int version_major
-        int version_minor
-        int version_patchlevel
-        int name_len
         char *name
-        int date_len
-        char *date
-        int desc_len
-        char *desc
     ctypedef _drmVersion *drmVersionPtr
 
     drmVersionPtr drmGetVersion(int fd)

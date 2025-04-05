@@ -3,38 +3,11 @@ from libc.stdint cimport uint32_t, uint64_t
 cdef extern from "amdgpu.h" nogil:
     struct amdgpu_device
     ctypedef amdgpu_device *amdgpu_device_handle
+    # note: amdgpu_gpu_info defines more fields, we define only the ones needed
+    # ordering does not matter as they are resolved by the compiler with the real header file
     struct amdgpu_gpu_info:
-        uint32_t asic_id
-        uint32_t chip_rev
-        uint32_t chip_external_rev
-        uint32_t family_id
-        uint64_t ids_flags
         uint64_t max_engine_clk
         uint64_t max_memory_clk
-        uint32_t num_shader_engines
-        uint32_t num_shader_arrays_per_engine
-        uint32_t avail_quad_shader_pipes
-        uint32_t max_quad_shader_pipes
-        uint32_t cache_entries_per_quad_pipe
-        uint32_t num_hw_gfx_contexts
-        uint32_t rb_pipes
-        uint32_t enabled_rb_pipes_mask
-        uint32_t gpu_counter_freq
-        uint32_t backend_disable[4]
-        uint32_t mc_arb_ramcfg
-        uint32_t gb_addr_cfg
-        uint32_t gb_tile_mode[32]
-        uint32_t gb_macro_tile_mode[16]
-        uint32_t pa_sc_raster_cfg[4]
-        uint32_t pa_sc_raster_cfg1[4]
-        uint32_t cu_active_number
-        uint32_t cu_ao_mask
-        uint32_t cu_bitmap[4][4]
-        uint32_t vram_type
-        uint32_t vram_bit_width
-        uint32_t ce_ram_size
-        uint32_t vce_harvest_config
-        uint32_t pci_rev_id
 
     int amdgpu_device_initialize(int fd, uint32_t *major_version, uint32_t *minor_version, amdgpu_device_handle *device_handle)
     int amdgpu_device_deinitialize(amdgpu_device_handle dev)

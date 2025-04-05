@@ -7,10 +7,11 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 EXTENSIONS = [
     setuptools.Extension(
-        name="pyamdgpuinfo._pyamdgpuinfo",
-        sources=["pyamdgpuinfo/_pyamdgpuinfo.pyx"],
+        name="pyamdgpuinfo._impl",
+        sources=["pyamdgpuinfo/_impl.pyx"],
         include_dirs=["/usr/include/libdrm"],
         libraries=["drm_amdgpu"],
+        extra_compile_args=['-DCYTHON_USE_TYPE_SPECS=1'],
     )
 ]
 
@@ -24,7 +25,7 @@ setuptools.setup(
     url="https://github.com/mark9064/pyamdgpuinfo",
     packages=setuptools.find_packages(),
     python_requires=">=3.8",
-    ext_modules=cythonize(EXTENSIONS, language_level="3str"),
+    ext_modules=cythonize(EXTENSIONS),
     zip_safe=False,
     classifiers=[
         "Programming Language :: Python :: 3",

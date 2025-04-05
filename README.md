@@ -10,18 +10,18 @@ Only Linux is supported, using the AMDGPU driver.
 
 The library is written using Cython, meaning that Cython and and a C compiler are needed to build and install from source. Additionally, libdrm development headers are required. 
 
-Precompiled wheels for Python 3.8-3.12 are the default method of install. This means that you don't need Cython or any other dependencies to install it normally.
+Precompiled wheels for Python 3.8-3.12 are the default method of install. This means that you don't need Cython or any other dependencies to install from PyPi.
 
 ## Usage
 
 Example:
 ```python
 >>> import pyamdgpuinfo
->>> n_devices = pyamdgpuinfo.detect_gpus()
+>>> pyamdgpuinfo.detect_gpus()
 1 # we have 1 device present, so it'll be at index 0
 >>> first_gpu = pyamdgpuinfo.get_gpu(0) # returns a GPUInfo object
 >>> vram_usage = first_gpu.query_vram_usage()
->>> print(vram_usage)
+>>> vram_usage
 3954978816 # number of bytes in use
 ```
 
@@ -33,8 +33,8 @@ Available functions are (see docstrings for more info):
 
 
 GPUInfo methods (see docstring for class overview)
-* start_utilisation_polling - Starts polling GPU registers for utilisation statistics
-* stop_utilisation_polling - Stops the utilisation polling thread
+* start_utilisation_polling - Starts polling GPU functional units for utilisation statistics
+* stop_utilisation_polling - Stops utilisation polling
 * query_utilisation - Queries utilisation of different GPU parts
 * query_max_clocks - Queries max GPU clocks
 * query_sclk - Queries shader (core) clock

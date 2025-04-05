@@ -27,21 +27,26 @@ cdef dict COMPARE_BITS = {
     "graphics_pipe": 2 ** 31
 }
 
+cdef enum UtilisationThreadState:
+    OFF = 0
+    RUN = 1
+    WARMUP = 2
 
-cdef int get_registers(amdgpu_cy.amdgpu_device_handle amdgpu_dev, uint32_t *out) nogil:
+
+cdef int get_registers(amdgpu_cy.amdgpu_device_handle amdgpu_dev, uint32_t *out) noexcept nogil:
     """Returns whether AMDGPU query succeeds, returns query result through out"""
     return amdgpu_cy.amdgpu_read_mm_registers(amdgpu_dev, GRBM_OFFSET, 1, 0xffffffff, 0, out)
 
-cdef int query_info(amdgpu_cy.amdgpu_device_handle amdgpu_dev, int info, unsigned long long *out):
+cdef int query_info(amdgpu_cy.amdgpu_device_handle amdgpu_dev, int info, unsigned long long *out) noexcept nogil:
     """Returns whether AMDGPU query succeeds, returns query result through out"""
     return amdgpu_cy.amdgpu_query_info(amdgpu_dev, info, sizeof(unsigned long long), out)
 
-cdef int query_sensor(amdgpu_cy.amdgpu_device_handle amdgpu_dev, int info, unsigned long long *out):
+cdef int query_sensor(amdgpu_cy.amdgpu_device_handle amdgpu_dev, int info, unsigned long long *out) noexcept nogil:
     """Returns whether AMDGPU query succeeds, returns query result through out"""
     return amdgpu_cy.amdgpu_query_sensor_info(amdgpu_dev, info, sizeof(unsigned long long), out)
 
 
-cdef timespec timespec_subtract(timespec left, timespec right) nogil:
+cdef timespec timespec_subtract(timespec left, timespec right) noexcept nogil:
     """Performs left - right"""
     cdef:
         timespec temp
@@ -53,14 +58,14 @@ cdef timespec timespec_subtract(timespec left, timespec right) nogil:
         temp.tv_nsec = left.tv_nsec - right.tv_nsec
     return temp
 
-cdef timespec timespec_clamp(timespec time_to_clamp) nogil:
+cdef timespec timespec_clamp(timespec time_to_clamp) noexcept nogil:
     """Clamps a timespec to 0 if seconds is negative"""
     if time_to_clamp.tv_sec < 0:
         time_to_clamp.tv_sec = 0
         time_to_clamp.tv_nsec = 0
     return time_to_clamp
 
-cdef timespec timespec_sum(timespec left, timespec right) nogil:
+cdef timespec timespec_sum(timespec left, timespec right) noexcept nogil:
     """Performs left + right"""
     cdef:
         timespec temp
@@ -74,9 +79,9 @@ cdef timespec timespec_sum(timespec left, timespec right) nogil:
 
 cdef struct poll_args_t:
     # the state the thread should be in
-    int desired_state
+    UtilisationThreadState desired_state
     # the thread's actual state
-    int current_state # 0=dead, 1=alive, 2=warmup
+    UtilisationThreadState current_state
     timespec measurement_interval
     int buffer_size
     uint32_t* results
@@ -93,22 +98,22 @@ cdef void* poll_registers(void *arg) noexcept nogil:
         timespec sleep_start_time
         timespec sleep_duration
     args = <poll_args_t*>arg
-    args.current_state = 2
+    args.current_state = UtilisationThreadState.WARMUP
     # timer init
     sleep_duration = args.measurement_interval
     if clock_gettime(CLOCK_MONOTONIC, &sleep_start_time) != 0:
-        args.current_state = 0
+        args.current_state = UtilisationThreadState.OFF
         return NULL
-    nanosleep(&sleep_duration, NULL)
-    while args.desired_state:
+    sleep_start_time = timespec_subtract(sleep_start_time, sleep_duration)
+    while args.desired_state == UtilisationThreadState.RUN:
         clock_gettime(CLOCK_MONOTONIC, &iteration_start_time)
         if get_registers(args.device_handle[0], &register_data) != 0:
-            args.current_state = 0
+            args.current_state = UtilisationThreadState.OFF
             return NULL
         args.results[index] = register_data
         index += 1
         if index >= args.buffer_size:
-            args.current_state = 1
+            args.current_state = UtilisationThreadState.RUN
             index = 0
         clock_gettime(CLOCK_MONOTONIC, &iteration_end_time)
         sleep_duration = timespec_clamp(
@@ -135,7 +140,7 @@ cdef void* poll_registers(void *arg) noexcept nogil:
         )
         clock_gettime(CLOCK_MONOTONIC, &sleep_start_time)
         nanosleep(&sleep_duration, NULL)
-    args.current_state = 0
+    args.current_state = UtilisationThreadState.OFF
     return NULL
 
 
@@ -174,12 +179,12 @@ cpdef object get_gpu(int gpu_id):
     """Returns GPUInfo object for gpu_id
 
     Params:
-        gpu_id: int; the sequential id of the GPU to get
+        gpu_id: int; the sequential id of the GPU to get.
     Raises:
         OSError: if an AMDGPU device couldn't be initialised.
         RuntimeError: if the GPU requested could not be found.
     Returns:
-        GPUInfo; object providing interface to GPU info calls
+        GPUInfo; object providing interface to GPU info calls.
     Extra information:
         Find the number of GPUs available by calling detect_gpus() first.
         e.g you could do
@@ -222,7 +227,7 @@ cpdef object get_gpu(int gpu_id):
         amdgpu_index += 1
     if gpu_id == -1:
         return amdgpu_index
-    raise RuntimeError("GPU id {0} not found".format(gpu_id))
+    raise RuntimeError(f"GPU id {gpu_id} not found")
 
 
 cdef class GPUInfo:
@@ -243,9 +248,10 @@ cdef class GPUInfo:
             - "gtt_size": int, None; GPU GTT size.
             - "vram_cpu_accessible_size": int, None; size of VRAM accessible by CPU.
     Methods:
-        start_utilisation_polling: starts the utilisation polling thread.
-        stop_utilisation_polling: stops the utilisation polling thread.
-        query_utilisation: queries utilisation of different GPU units using polling thread.
+        start_utilisation_polling: starts utilisation polling.
+        stop_utilisation_polling: stops utilisation polling.
+        query_utilisation: calculates utilisation of different GPU blocks (relies on above polling).
+
         query_max_clocks: queries max GPU clocks.
         query_vram_usage: queries VRAM usage.
         query_gtt_usage: queries GTT usage.
@@ -280,15 +286,14 @@ cdef class GPUInfo:
         self.utilisation_polling = False
 
     def __dealloc__(self):
-        # __del__ not available for extension types until Cython 3.0
         cdef:
             timespec sleep_time
         sleep_time.tv_nsec = 1_000_000
         sleep_time.tv_sec = 0
         if self.utilisation_polling:
-            self.thread_args.desired_state = 0
+            self.thread_args.desired_state = UtilisationThreadState.OFF
             # wait for it to exit
-            while self.thread_args.current_state != 0:
+            while self.thread_args.current_state != UtilisationThreadState.OFF:
                 nanosleep(&sleep_time, NULL)
             free(self.thread_args.results)
             free(self.thread_args)
@@ -321,36 +326,36 @@ cdef class GPUInfo:
             self.memory_info["vram_cpu_accessible_size"] = None
 
         device_name = amdgpu_cy.amdgpu_get_marketing_name(self.device_handle)
-        # null check device name (segfault gang)
+        # device name can be null
         if device_name:
             self.name = device_name.decode()
         else:
             self.name = None
 
-    cpdef object start_utilisation_polling(self, int ticks_per_second=100, int buffer_size_in_ticks=100):
-        """Starts the utilisation polling thread
+    cpdef object start_utilisation_polling(self, int polls_per_second=100, int averaging_period=100):
+        """Starts utilisation polling used for query_utilisation()
 
         Params:
-            ticks_per_second (optional, default 100): int; specifies the number of device polls
+            polls_per_second (optional, default 100): int; the number of device polls
             that will be performed each second.
-            buffer_size_in_ticks (optional, default 100): int; specifies the number of ticks
-            which will be stored.
+            averaging_period (optional, default 100): int; the number of polls
+            to average over.
         Raises:
-            RuntimeError: if the thread is already running.
-            OSError: if the polling thread fails to start.
+            RuntimeError: if polling is already running.
+            OSError: if polling fails to start.
         Returns:
             Nothing returned.
         Extra information:
-            - This function starts a thread which reads GPU performance registers {ticks_per_second} times per second
-                - These registers store the status of GPU components, simply as 1 (in use) or 0 (not in use) for each component
-            - The results of these reads is saved to a buffer of {buffer_size_in_ticks}
-            - When utilisation is queried, a mean is taken of all the values in the buffer
-                - e.g texture addresser data may be 0000100100, 10 samples with 2 ones, so utilisation is 0.2
-            - This means that the time period of the mean is buffer_size_in_ticks / ticks_per_second
-                - So at default it is a mean of the past second (100/100 = 1)
-            - When the thread has just started, querying utilisation before one time period has elasped will error
-                - The buffer will not have been populated at this point and will be partly zeroes, so a mean would be misleading
-            - The polling thread provides data only for query_utilisation
+            - Polling provides data only for query_utilisation, other queries do not need it
+                - Polling actively uses CPU time so only start polling if you need it!
+            - GPU functional block activity (either active or inactive) is polled n times per second
+            - When utilisation is queried, a mean is taken of all the previous values within the averaging period
+                - e.g texture addresser activity may be 0000100100, 10 samples with 2 ones, so utilisation is 0.2
+                - (here the averaging period is 10)
+            - Therefore the time period of the mean is polls_per_second / averaging_period
+                - So at defaults a mean of the past second (100/100 = 1)
+            - When polling has just started, querying utilisation before one time period has elapsed will error
+                - The buffer will not have been populated at this point
 
             WARNING: Utilisation polling may not work correctly with all devices, in testing it
             has been unreliable with some APUs.
@@ -360,18 +365,19 @@ cdef class GPUInfo:
             pthread_cy.pthread_attr_t attr
             int index
         if self.utilisation_polling:
-            raise RuntimeError("Thread already started")
+            raise RuntimeError("Polling already started")
         pthread_cy.pthread_attr_init(&attr)
+        # why detached?
         pthread_cy.pthread_attr_setdetachstate(&attr, pthread_cy.PTHREAD_CREATE_DETACHED)
         self.thread_args = <poll_args_t*>malloc(sizeof(poll_args_t))
         if not self.thread_args:
             raise MemoryError()
-        self.thread_args.desired_state = 1
-        self.thread_args.current_state = 0
-        self.thread_args.measurement_interval.tv_nsec = int((1 / ticks_per_second * 1e9) % 1e9)
-        self.thread_args.measurement_interval.tv_sec = 1 // ticks_per_second
-        self.thread_args.buffer_size = buffer_size_in_ticks
-        self.thread_args.results = <uint32_t*>calloc(buffer_size_in_ticks, sizeof(uint32_t))
+        self.thread_args.desired_state = UtilisationThreadState.RUN
+        self.thread_args.current_state = UtilisationThreadState.OFF
+        self.thread_args.measurement_interval.tv_nsec = int((1 / polls_per_second * 1e9) % 1e9)
+        self.thread_args.measurement_interval.tv_sec = 1 // polls_per_second
+        self.thread_args.buffer_size = averaging_period
+        self.thread_args.results = <uint32_t*>calloc(averaging_period, sizeof(uint32_t))
         if not self.thread_args.results:
             raise MemoryError()
         self.thread_args.device_handle = &self.device_handle
@@ -379,19 +385,20 @@ cdef class GPUInfo:
         if pthread_cy.pthread_create(&tid, &attr, poll_registers, self.thread_args) != 0:
             # cleans up
             self.stop_utilisation_polling()
-            raise OSError("Poll thread failed to start")
+            raise OSError("Failed to start polling")
 
     cpdef object stop_utilisation_polling(self):
-        """Stops the utilisation polling thread
+        """Stops utilisation polling
 
         Params:
             No params.
         Raises:
-            RuntimeError: if the thread was does not exist.
+            No specific exceptions.
         Returns:
             Nothing returned.
         Extra information:
-            This also frees all resources allocated for the thread.
+            This is safe to call even if utilisation polling is not currently running.
+            This frees all resources allocated.
         """
         cdef:
             timespec sleep_time
@@ -399,10 +406,10 @@ cdef class GPUInfo:
         sleep_time.tv_sec = 0
 
         if not self.utilisation_polling:
-            raise RuntimeError("Thread non-existent (never started or already stopped)")
-        self.thread_args.desired_state = 0
+            return
+        self.thread_args.desired_state = UtilisationThreadState.OFF
         # wait for it to exit
-        while self.thread_args.current_state != 0:
+        while self.thread_args.current_state != UtilisationThreadState.OFF:
             nanosleep(&sleep_time, NULL)
         free(self.thread_args.results)
         free(self.thread_args)
@@ -427,8 +434,9 @@ cdef class GPUInfo:
                 - "graphics_pipe"
         Extra information:
             RuntimeError can be raised for:
-                - Utilisation polling thread not existing/alive if utilisation requested
-                - Utilisation polling thread initialising
+                - Utilisation polling not started
+                - Utilisation polling stopped due to an error
+                - Utilisation polling initialising
         """
         cdef:
             dict utilisation
@@ -437,13 +445,13 @@ cdef class GPUInfo:
             str bit
             unsigned int compare
         if not self.utilisation_polling:
-            raise RuntimeError("Utilisation polling thread not running, call "
-                               "start_utilisation_polling() (and wait for thread initialisation) "
+            raise RuntimeError("Utilisation polling not started, call "
+                               "start_utilisation_polling() (and wait for initialisation) "
                                "before querying utilisation")
-        if self.thread_args.current_state == 0:
-            raise RuntimeError("Utilisation polling thread is not alive")
-        if self.thread_args.current_state == 2:
-            raise RuntimeError("Utilisation polling thread initialising, "
+        if self.thread_args.current_state == UtilisationThreadState.OFF:
+            raise RuntimeError("Utilisation polling exited due to an error")
+        if self.thread_args.current_state == UtilisationThreadState.WARMUP:
+            raise RuntimeError("Utilisation polling initialising, "
                                "this takes {0:.2f}s with current options (see start_utilisation_polling docstring)"
                                 .format(self.thread_args.buffer_size
                                         * (self.thread_args.measurement_interval.tv_nsec / 1e9
@@ -458,7 +466,7 @@ cdef class GPUInfo:
 
     cdef object check_amdgpu_retcode(self, int retcode):
         if retcode != 0:
-            raise RuntimeError("Unknown query failure (an AMDGPU call failed). This query may not be supported for this GPU.")
+            raise RuntimeError("Unknown query failure (an AMDGPU call failed). This query may not be supported for this GPU")
 
     cpdef object query_max_clocks(self):
         """Queries max GPU clocks
@@ -466,7 +474,7 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
             dict,
                 - "max_sclk": int, hertz
@@ -485,9 +493,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            int, usage in bytes.
+            int; usage in bytes.
         """
         cdef:
             unsigned long long out = 0
@@ -501,9 +509,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            int, usage in bytes.
+            int; usage in bytes.
         """
         cdef:
             unsigned long long out = 0
@@ -517,9 +525,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            int, shader clock in hertz.
+            int; shader clock in hertz.
         """
         cdef:
             unsigned long long out = 0
@@ -533,9 +541,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            int, memory clock in hertz.
+            int; memory clock in hertz.
         """
         cdef:
             unsigned long long out = 0
@@ -549,9 +557,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            float, temperature in °C.
+            float; temperature in °C.
         """
         cdef:
             unsigned long long out = 0
@@ -565,9 +573,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            float, value between 0 and 1.
+            float; value between 0 and 1.
         """
         cdef:
             unsigned long long out = 0
@@ -581,9 +589,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            int, consumption in W.
+            int; consumption in W.
         """
         cdef:
             unsigned long long out = 0
@@ -597,9 +605,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            float, voltage in V.
+            float; voltage in V.
         """
         cdef:
             unsigned long long out = 0
@@ -613,9 +621,9 @@ cdef class GPUInfo:
         Params:
             No params.
         Raises:
-            RuntimeError: if an error occurs when calling AMDGPU methods.
+            RuntimeError: if an error occurs when calling into AMDGPU.
         Returns:
-            float, voltage in V.
+            float; voltage in V.
         """
         cdef:
             unsigned long long out = 0
