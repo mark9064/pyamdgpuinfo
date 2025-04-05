@@ -24,7 +24,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/mark9064/pyamdgpuinfo",
     packages=setuptools.find_packages(),
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     ext_modules=cythonize(EXTENSIONS),
     zip_safe=False,
     classifiers=[

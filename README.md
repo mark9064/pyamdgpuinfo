@@ -10,7 +10,7 @@ Only Linux is supported, using the AMDGPU driver.
 
 The library is written using Cython, meaning that Cython and and a C compiler are needed to build and install from source. Additionally, libdrm development headers are required. 
 
-Precompiled wheels for Python 3.8-3.12 are the default method of install. This means that you don't need Cython or any other dependencies to install from PyPi.
+Precompiled wheels for Python 3.9-3.13 are the default method of install. This means that you don't need Cython or any other dependencies to install from PyPi.
 
 ## Usage
 
