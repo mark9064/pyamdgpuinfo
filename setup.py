@@ -28,10 +28,10 @@ setuptools.setup(
     python_requires=">=3.10",
     ext_modules=cythonize(EXTENSIONS),
     zip_safe=False,
+    license="GPL-3.0-only",
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Cython",
-        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: POSIX :: Linux",
         "Development Status :: 5 - Production/Stable",
         "Natural Language :: English",
