@@ -367,7 +367,6 @@ cdef class GPUInfo:
         if self.utilisation_polling:
             raise RuntimeError("Polling already started")
         pthread_cy.pthread_attr_init(&attr)
-        # why detached?
         pthread_cy.pthread_attr_setdetachstate(&attr, pthread_cy.PTHREAD_CREATE_DETACHED)
         self.thread_args = <poll_args_t*>malloc(sizeof(poll_args_t))
         if not self.thread_args:

@@ -11,7 +11,7 @@ EXTENSIONS = [
         sources=["pyamdgpuinfo/_impl.pyx"],
         include_dirs=["/usr/include/libdrm"],
         libraries=["drm_amdgpu"],
-        extra_compile_args=['-DCYTHON_USE_TYPE_SPECS=1'],
+        extra_compile_args=["-DCYTHON_USE_TYPE_SPECS=1"],
     )
 ]
 
